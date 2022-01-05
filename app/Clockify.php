@@ -23,7 +23,7 @@ class Clockify
 
     public function listTasks(string $from, string $to)
     {
-        $response = $this->http()
+        return $this->http()
             ->get(
                 sprintf(
                     '%s/workspaces/%s/user/%s/time-entries?start=%s&end=%s&hydrated=1',
@@ -33,16 +33,17 @@ class Clockify
                     $from,
                     $to
                 )
-            );
-
-        return json_decode($response->body());
+            )->throw()->json();
     }
 
     protected function getUserId()
     {
-        $response = $this->http()->get(sprintf('%s/user', $this->baseUrl()));
+        $response = $this->http()
+            ->get(sprintf('%s/user', $this->baseUrl()))
+            ->throw()
+            ->json();
 
-        $this->userId = data_get(json_decode($response->body()), 'id');
+        $this->userId = data_get($response, 'id');
     }
 
     protected function http(): PendingRequest

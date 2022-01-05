@@ -3,11 +3,9 @@
 namespace App\Commands;
 
 use App\Clockify;
+use Exception;
 use Illuminate\Support\Carbon;
 use LaravelZero\Framework\Commands\Command;
-use stdClass;
-
-use function Termwind\render;
 
 class ListTasks extends Command
 {
@@ -33,29 +31,39 @@ class ListTasks extends Command
      */
     public function handle()
     {
-        $client = new Clockify(
-            apiKey: 'ZmQzZmI3ZjYtZWEzYS00MTgyLTgxYzMtOGRlYTNmYjY3NGEy',
-            workspaceId: '600ef1d1afcebe46f8753cc7'
-        );
+        try {
+            $client = new Clockify(
+                apiKey: 'ZmQzZmI3ZjYtZWEzYS00MTgyLTgxYzMtOGRlYTNmYjY3NGEy',
+                workspaceId: '600ef1d1afcebe46f8753cc7'
+            );
 
-        [$from, $to] = $this->getTimeRange();
+            [$from, $to] = $this->getTimeRange();
 
-        $response = $client->listTasks($from, $to);
+            $response = $client->listTasks($from->toISOString(), $to->toISOString());
 
-        if ($response instanceof stdClass) {
-            $this->error($response->message);
-            return;
+            $this->render($response);
+
+            $this->newLine();
+            $this->info(sprintf('From %s to %s', $from, $to));
+        } catch (Exception $e) {
+            $this->error($e->getMessage());
         }
-
-        $this->render($response);
     }
 
     protected function getTimeRange(): array
     {
         $month = $this->argument('month');
 
-        $from = Carbon::parse($month)->startOfMonth()->toISOString();
-        $to = Carbon::parse($month)->endOfMonth()->toISOString();
+        if (empty($month)) {
+            $from = now()->subMonth();
+            $to = now();
+        } elseif (now() < Carbon::parse($month)->startOfMonth()) {
+            $from = Carbon::parse($month)->subYear()->startOfMonth();
+            $to = Carbon::parse($month)->subYear()->endOfMonth();
+        } else {
+            $from = Carbon::parse($month)->startOfMonth();
+            $to = Carbon::parse($month)->endOfMonth();
+        }
 
         return [$from, $to];
     }
@@ -73,13 +81,14 @@ class ListTasks extends Command
         collect($tasks)
             ->groupBy('projectId')
             ->each(function ($projectTasks) {
-                $this->info($projectTasks->first()->project->clientName . ' - ' . $projectTasks->first()->project->name);
+                $project = $projectTasks->first()['project'];
+                $this->info($project['clientName'] . ' - ' . $project['name']);
 
                 $this->newLine();
 
                 $projectTasks
                     ->unique('description')
-                    ->each(fn ($task) => $this->line($task->description));
+                    ->each(fn ($task) => $this->line($task['description']));
 
                 $this->newLine();
             });
