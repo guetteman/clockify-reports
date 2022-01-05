@@ -26,13 +26,34 @@ class Clockify
         return $this->http()
             ->get(
                 sprintf(
-                    '%s/workspaces/%s/user/%s/time-entries?start=%s&end=%s&hydrated=1',
+                    '%s/workspaces/%s/user/%s/time-entries?start=%s&end=%s&hydrated=1&page-size=5000',
                     $this->baseUrl(),
                     $this->workspaceId,
                     $this->userId,
                     $from,
                     $to
                 )
+            )->throw()->json();
+    }
+
+    public function detailedReport(string $from, string $to)
+    {
+        return $this->http()
+            ->post(
+                sprintf(
+                    '%s/workspaces/%s/reports/detailed',
+                    $this->reportsBaseUrl(),
+                    $this->workspaceId,
+                ),
+                [
+                    'dateRangeStart' => $from,
+                    'dateRangeEnd' => $to,
+                    'detailedFilter' => [
+                        'page' => 1,
+                        'pageSize' => 1000,
+                    ],
+                    'amountShown' => 'HIDE_AMOUNT',
+                ]
             )->throw()->json();
     }
 
@@ -57,5 +78,10 @@ class Clockify
     protected function baseUrl(): string
     {
         return 'https://api.clockify.me/api/v1';
+    }
+
+    protected function reportsBaseUrl(): string
+    {
+        return 'https://reports.api.clockify.me/v1';
     }
 }

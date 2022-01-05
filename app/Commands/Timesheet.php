@@ -7,14 +7,14 @@ use Exception;
 use Illuminate\Support\Carbon;
 use LaravelZero\Framework\Commands\Command;
 
-class ListTasks extends Command
+class Timesheet extends Command
 {
     /**
      * The signature of the command.
      *
      * @var string
      */
-    protected $signature = 'report:tasks
+    protected $signature = 'report:timesheet
                             {month? : 3 letters month}';
 
     /**
@@ -22,7 +22,7 @@ class ListTasks extends Command
      *
      * @var string
      */
-    protected $description = 'List tasks for a provided month';
+    protected $description = 'Timesheet for provided month';
 
     /**
      * Execute the console command.
@@ -31,6 +31,8 @@ class ListTasks extends Command
      */
     public function handle()
     {
+        $workingDays = $this->ask('Working days: ');
+
         try {
             $client = new Clockify(
                 apiKey: env('CLOCKIFY_API_KEY', ''),
@@ -39,9 +41,9 @@ class ListTasks extends Command
 
             [$from, $to] = $this->getTimeRange();
 
-            $response = $client->listTasks($from->toISOString(), $to->toISOString());
+            $response = $client->detailedReport($from->toISOString(), $to->toISOString());
 
-            $this->render($response);
+            $this->render($response, $workingDays);
 
             $this->newLine();
             $this->info(sprintf('From %s to %s', $from, $to));
@@ -50,30 +52,39 @@ class ListTasks extends Command
         }
     }
 
-    protected function render(array $tasks): void
+    protected function render(array $response, int $workingDays): void
     {
         $this->newLine();
 
-        if (count($tasks) <= 0) {
+        if (count(data_get($response, 'timeentries', [])) <= 0) {
             $this->info('There are no tasks for this month');
 
             return;
         }
 
-        collect($tasks)
+        $timesheet = collect(data_get($response, 'timeentries'))
             ->groupBy('projectId')
-            ->each(function ($projectTasks) {
-                $project = $projectTasks->first()['project'];
-                $this->info($project['clientName'] . ' - ' . $project['name']);
+            ->map(function ($timeEntries) {
+                $hours = $timeEntries
+                    ->reduce(function (float $result, array $timeEntry) {
+                        return $result + data_get($timeEntry, 'timeInterval.duration', 0);
+                    }, 0) / 3600;
 
-                $this->newLine();
-
-                $projectTasks
-                    ->unique('description')
-                    ->each(fn ($task) => $this->line($task['description']));
-
-                $this->newLine();
+                return [$timeEntries[0]['clientName'] . ' - ' . $timeEntries[0]['projectName'], round($hours, 2)];
             });
+
+        $total = round(data_get($response, 'totals.0.totalTime', 0) / 3600, 2);
+
+        $timesheet->push(['', '']);
+
+        $timesheet->push(['Working hours', $workingDays * 8]);
+        $timesheet->push(['MPB', $total - $workingDays * 8]);
+        $timesheet->push(['Total', $total]);
+
+        $this->table(
+            ['Project', 'time (h)'],
+            $timesheet->values(),
+        );
     }
 
     protected function getTimeRange(): array
