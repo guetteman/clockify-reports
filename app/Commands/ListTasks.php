@@ -33,8 +33,8 @@ class ListTasks extends Command
     {
         try {
             $client = new Clockify(
-                apiKey: 'ZmQzZmI3ZjYtZWEzYS00MTgyLTgxYzMtOGRlYTNmYjY3NGEy',
-                workspaceId: '600ef1d1afcebe46f8753cc7'
+                apiKey: env('CLOCKIFY_API_KEY', ''),
+                workspaceId: env('CLOCKIFY_WORKSPACE_ID', ''),
             );
 
             [$from, $to] = $this->getTimeRange();
